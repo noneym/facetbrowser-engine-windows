@@ -100,6 +100,72 @@ def _run_build_process_timeout(*args, timeout):
             raise _BuildTimeout
 
 
+_PREFLIGHT_PATCH_DIRS = ('extra/fingerprint/', 'extra/facet/')
+_PREFLIGHT_MARKER = Path('out', 'Default', 'facet_preflight.done')
+
+
+def _preflight_sources():
+    """
+    Returns the translation units changed by the FacetBrowser Engine patches
+    (source-tree relative, forward slashes), in series order.
+
+    A patched Blink .idl is represented by the V8 binding generated from it.
+    """
+    patches_dir = _ROOT_DIR / 'ungoogled-chromium' / 'patches'
+    sources = []
+    for entry in (patches_dir / 'series').read_text(encoding=ENCODING).splitlines():
+        entry = entry.strip()
+        if not entry.startswith(_PREFLIGHT_PATCH_DIRS):
+            continue
+        for line in (patches_dir / entry).read_text(encoding=ENCODING).splitlines():
+            if not line.startswith('+++ b/'):
+                continue
+            path = line[len('+++ b/'):].split('\t')[0].strip()
+            idl = re.fullmatch(r'third_party/blink/renderer/(core|modules)/.*/(\w+)\.idl', path)
+            if idl:
+                path = 'gen/third_party/blink/renderer/bindings/{}/v8/v8_{}.cc'.format(*idl.groups())
+            elif path.endswith(('.cc', '.cpp', '.c')):
+                path = '../../' + path
+            else:
+                continue
+            if path not in sources:
+                sources.append(path)
+    return sources
+
+
+def _run_preflight(ninja_commandline, timeout):
+    """
+    Compiles the files changed by the FacetBrowser Engine patches before
+    anything else, with `-k 0`, so that every compile error in them shows up
+    in the first stage instead of one at a time over the whole build.
+
+    Nothing is built twice: the objects are part of the normal build.
+    """
+    if _PREFLIGHT_MARKER.exists():
+        return
+    try:
+        sources = _preflight_sources()
+        # Only files that are part of this platform's build are valid targets
+        result = subprocess.run(
+            (ninja_commandline[0], '-C', 'out\\Default', '-t', 'inputs', 'chrome'),
+            check=True, stdout=subprocess.PIPE, universal_newlines=True)
+        known = {line.strip().replace('\\', '/') for line in result.stdout.splitlines()}
+    except (OSError, subprocess.CalledProcessError) as exc:
+        get_logger().warning('Skipping preflight, could not list build inputs: %s', exc)
+        return
+    targets = [source + '^' for source in sources if source in known]
+    skipped = [source for source in sources if source not in known]
+    get_logger().info('Preflight: compiling %d patched files first', len(targets))
+    for source in skipped:
+        get_logger().info('Preflight: not an input of chrome, skipped: %s', source)
+    if targets:
+        commandline = list(ninja_commandline[:ninja_commandline.index('-C') + 2])
+        commandline[1:1] = ['-k', '0']
+        _run_build_process_timeout(*commandline, *targets, timeout=timeout)
+    _PREFLIGHT_MARKER.write_text('\n'.join(targets), encoding=ENCODING)
+    get_logger().info('Preflight: all patched files compile')
+
+
 def _make_tmp_paths():
     """Creates TMP and TEMP variable dirs so ninja won't fail"""
     tmp_path = Path(os.environ['TMP'])
@@ -366,7 +432,10 @@ def main():
 
     # Run ninja
     if args.ci:
-        _run_build_process_timeout(*ninja_commandline, timeout=3.5*60*60)
+        # The preflight shares the stage's time budget with the build itself
+        deadline = time.monotonic() + 3.5*60*60
+        _run_preflight(ninja_commandline, deadline - time.monotonic())
+        _run_build_process_timeout(*ninja_commandline, timeout=max(60, deadline - time.monotonic()))
         # package
         os.chdir(_ROOT_DIR)
         subprocess.run([sys.executable, 'package.py', '--cpu-arch', '32bit' if args.x86 else 'arm' if args.arm else '64bit'])
