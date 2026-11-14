@@ -24,7 +24,7 @@ async function run() {
 
     if (from_artifact) {
         await exec.exec(process.execPath, [`${import.meta.dirname}\\download.js`, artifactName,
-            'C:\\ungoogled-chromium-windows\\build']);
+            'C:\\ungoogled-chromium-windows\\build', core.getInput('resume_run_id')]);
         await exec.exec('7z', ['x', 'C:\\ungoogled-chromium-windows\\build\\artifacts.zip',
             '-oC:\\ungoogled-chromium-windows\\build', '-y']);
         await io.rmRF('C:\\ungoogled-chromium-windows\\build\\artifacts.zip');

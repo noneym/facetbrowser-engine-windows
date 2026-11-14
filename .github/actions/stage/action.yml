@@ -7,6 +7,10 @@ inputs:
   from_artifact:
     description: If a previous stage already uploaded build artifacts, the stage will resume building
     required: true
+  resume_run_id:
+    description: Take the build artifact from this workflow run instead of the current one (first stage only)
+    required: false
+    default: ''
   x86:
     description: Build x86 binary
     required: false

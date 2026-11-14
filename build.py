@@ -30,6 +30,10 @@ sys.path.pop(0)
 _ROOT_DIR = Path(__file__).resolve().parent
 _PATCH_BIN_RELPATH = Path('third_party/git/usr/bin/patch.exe')
 _BUILD_TIMEOUT_EXIT_CODE = 124
+# Source changes for trees that were patched before the pinned engine commit,
+# see hotfix/README.md
+_HOTFIX_DIR = _ROOT_DIR / 'hotfix'
+_HOTFIX_MARKER_DIRNAME = 'facet_hotfix'
 
 
 class _BuildTimeout(Exception):
@@ -98,6 +102,31 @@ def _run_build_process_timeout(*args, timeout):
             except:
                 proc.kill()
             raise _BuildTimeout
+
+
+def _pending_hotfixes(source_tree):
+    """Returns (patch, marker) pairs of the hotfixes this source tree does not have yet"""
+    marker_dir = source_tree / _HOTFIX_MARKER_DIRNAME
+    return [(patch_path, marker_dir / (patch_path.name + '.done'))
+            for patch_path in sorted(_HOTFIX_DIR.glob('*.patch'))
+            if not (marker_dir / (patch_path.name + '.done')).exists()]
+
+
+def _mark_hotfixes_applied(source_tree):
+    """A tree patched from the pinned engine commit already contains every hotfix"""
+    for _, marker in _pending_hotfixes(source_tree):
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text('contained in the engine patches', encoding=ENCODING)
+
+
+def _apply_hotfixes(source_tree):
+    """Brings a source tree carried over from an earlier run up to the pinned engine commit"""
+    for patch_path, marker in _pending_hotfixes(source_tree):
+        get_logger().info('Hotfix: applying %s', patch_path.name)
+        patches.apply_patches([patch_path], source_tree,
+                              patch_bin_path=(source_tree / _PATCH_BIN_RELPATH))
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text('applied to a carried-over tree', encoding=ENCODING)
 
 
 _PREFLIGHT_PATCH_DIRS = ('extra/fingerprint/', 'extra/facet/')
@@ -310,6 +339,9 @@ def main():
             source_tree,
             None
         )
+        _mark_hotfixes_applied(source_tree)
+    else:
+        _apply_hotfixes(source_tree)
 
     # Check if rust-toolchain folder has been populated
     HOST_CPU_IS_64BIT = sys.maxsize > 2**32

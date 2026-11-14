@@ -14,6 +14,10 @@ on:
         type: boolean
         required: false
         default: false
+      resume-run-id:
+        type: string
+        required: false
+        default: ''
 
 jobs:
   build-1:
@@ -29,9 +33,12 @@ jobs:
       - name: Run Stage
         id: stage
         uses: ./.github/actions/stage
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         with:
           finished: false
-          from_artifact: false
+          from_artifact: ${{ inputs.resume-run-id != '' }}
+          resume_run_id: ${{ inputs.resume-run-id }}
           x86: ${{ inputs.x86 }}
           arm: ${{ inputs.arm }}
     outputs:
