@@ -5,16 +5,21 @@ inputs:
     description: Python version
     required: false
     default: '3.12'
+  finished:
+    description: The build has finished in an earlier stage, so only the stage action is set up
+    required: false
+    default: 'false'
 runs:
   using: composite
   steps:
     - name: Set up Python ${{ inputs.python-version }}
+      if: ${{ inputs.finished != 'true' }}
       uses: actions/setup-python@v6
       with:
         python-version: ${{ inputs.python-version }}
 
     - name: Use another engine revision
-      if: ${{ env.ENGINE_REF != '' }}
+      if: ${{ env.ENGINE_REF != '' && inputs.finished != 'true' }}
       shell: pwsh
       run: |
         git -C ungoogled-chromium fetch --depth 1 origin "$env:ENGINE_REF"
@@ -24,6 +29,7 @@ runs:
         git -C ungoogled-chromium log --oneline -1
 
     - name: Init
+      if: ${{ inputs.finished != 'true' }}
       shell: pwsh
       run: Copy-Item -Path . -Destination 'C:\ungoogled-chromium-windows' -Recurse
 
@@ -32,6 +38,7 @@ runs:
       run: npm install
       working-directory: ./.github/actions/stage
     - name: Install Windows SDK 10.0.28000.0
+      if: ${{ inputs.finished != 'true' }}
       shell: pwsh
       run: |
         if (Test-Path 'C:\Program Files (x86)\Windows Kits\10\Include\10.0.28000.0') {
