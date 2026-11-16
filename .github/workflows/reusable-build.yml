@@ -18,6 +18,19 @@ on:
         type: string
         required: false
         default: ''
+      engine-ref:
+        type: string
+        required: false
+        default: ''
+      preflight-only:
+        type: boolean
+        required: false
+        default: false
+
+env:
+  # Read by the prepare action and by build.py
+  ENGINE_REF: ${{ inputs.engine-ref }}
+  FACET_PREFLIGHT_ONLY: ${{ inputs.preflight-only }}
 
 jobs:
   build-1:
@@ -364,6 +377,9 @@ jobs:
     steps:
       - name: Ensure build finished
         run: |
+          if [ "${{ inputs.preflight-only }}" = "true" ]; then
+            echo "Preflight only: no package was built."
+          fi
           if [ "${{ needs.build-16.outputs.finished }}" != "true" ]; then
             echo "Build did not finish after 16 stages."
             exit 1

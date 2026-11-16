@@ -7,6 +7,16 @@ on:
         type: string
         required: false
         default: ''
+      engine_ref:
+        description: Branch, tag or commit of the engine repository to build instead of the pinned submodule
+        type: string
+        required: false
+        default: ''
+      preflight_only:
+        description: Stop after compiling the files the engine patches change
+        type: boolean
+        required: false
+        default: false
   push:
     tags:
       - '*'
@@ -16,7 +26,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: build-x64-${{ github.ref }}
+  group: build-x64-${{ github.ref }}-${{ inputs.engine_ref }}
   cancel-in-progress: false
 
 jobs:
@@ -24,3 +34,5 @@ jobs:
     uses: ./.github/workflows/reusable-build.yml
     with:
       resume-run-id: ${{ inputs.resume_run_id }}
+      engine-ref: ${{ inputs.engine_ref }}
+      preflight-only: ${{ inputs.preflight_only || false }}

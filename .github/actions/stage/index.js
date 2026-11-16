@@ -5,6 +5,8 @@ import { DefaultArtifactClient } from '@actions/artifact';
 import * as glob from '@actions/glob';
 
 const BUILD_TIMEOUT_EXIT_CODE = 124;
+// build.py stopped after the preflight because FACET_PREFLIGHT_ONLY is set
+const PREFLIGHT_ONLY_EXIT_CODE = 125;
 
 async function run() {
     process.on('SIGINT', function() {
@@ -65,7 +67,7 @@ async function run() {
                 await new Promise(r => setTimeout(r, 10000));
             }
         }
-    } else if (retCode === BUILD_TIMEOUT_EXIT_CODE) {
+    } else if (retCode === BUILD_TIMEOUT_EXIT_CODE || retCode === PREFLIGHT_ONLY_EXIT_CODE) {
         await new Promise(r => setTimeout(r, 5000));
         await exec.exec('7z', ['a', '-tzip', 'C:\\ungoogled-chromium-windows\\artifacts.zip',
             'C:\\ungoogled-chromium-windows\\build\\src', '-mx=3', '-mtc=on'], {ignoreReturnCode: true});
@@ -85,7 +87,9 @@ async function run() {
                 await new Promise(r => setTimeout(r, 10000));
             }
         }
-        core.setOutput('finished', false);
+        // After a preflight-only stage the later stages have nothing to do. Its
+        // tree is uploaded all the same, so that a full build can continue from it.
+        core.setOutput('finished', retCode === PREFLIGHT_ONLY_EXIT_CODE);
     } else {
         throw new Error(`Build failed with exit code ${retCode}`);
     }

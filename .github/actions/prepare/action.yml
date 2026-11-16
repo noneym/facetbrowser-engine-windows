@@ -13,6 +13,16 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
 
+    - name: Use another engine revision
+      if: ${{ env.ENGINE_REF != '' }}
+      shell: pwsh
+      run: |
+        git -C ungoogled-chromium fetch --depth 1 origin "$env:ENGINE_REF"
+        if ($LASTEXITCODE -ne 0) { throw "could not fetch engine revision $env:ENGINE_REF" }
+        git -C ungoogled-chromium checkout --detach FETCH_HEAD
+        if ($LASTEXITCODE -ne 0) { throw "could not check out engine revision $env:ENGINE_REF" }
+        git -C ungoogled-chromium log --oneline -1
+
     - name: Init
       shell: pwsh
       run: Copy-Item -Path . -Destination 'C:\ungoogled-chromium-windows' -Recurse

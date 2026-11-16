@@ -86,8 +86,10 @@ def main():
     files_generator = filescfg.filescfg_generator(
         Path('build/src/chrome/tools/build/win/FILES.cfg'),
         build_outputs, args.cpu_arch, excluded_files)
+    # chromedriver.exe is built but is not in FILES.cfg: WebDriver clients
+    # need the one that matches this build
     filescfg.create_archive(
-        files_generator, tuple(), build_outputs, output, timestamp)
+        files_generator, (build_outputs / 'chromedriver.exe',), build_outputs, output, timestamp)
 
 if __name__ == '__main__':
     main()

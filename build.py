@@ -129,6 +129,10 @@ def _apply_hotfixes(source_tree):
         marker.write_text('applied to a carried-over tree', encoding=ENCODING)
 
 
+# build.py --ci exits with this after the preflight when FACET_PREFLIGHT_ONLY
+# is "true"; the stage action then keeps the tree and ends the run
+_PREFLIGHT_ONLY_EXIT_CODE = 125
+
 _PREFLIGHT_PATCH_DIRS = ('extra/fingerprint/', 'extra/facet/')
 _PREFLIGHT_MARKER = Path('out', 'Default', 'facet_preflight.done')
 
@@ -467,6 +471,9 @@ def main():
         # The preflight shares the stage's time budget with the build itself
         deadline = time.monotonic() + 3.5*60*60
         _run_preflight(ninja_commandline, deadline - time.monotonic())
+        if os.environ.get('FACET_PREFLIGHT_ONLY') == 'true':
+            get_logger().info('Preflight only: stopping before the full build')
+            sys.exit(_PREFLIGHT_ONLY_EXIT_CODE)
         _run_build_process_timeout(*ninja_commandline, timeout=max(60, deadline - time.monotonic()))
         # package
         os.chdir(_ROOT_DIR)
